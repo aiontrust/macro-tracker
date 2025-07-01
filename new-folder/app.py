@@ -68,3 +68,56 @@ ax.grid(True)
 fig.autofmt_xdate()
 
 st.pyplot(fig) 
+
+# === Weekly Summary Section ===
+st.markdown("### 📅 Weekly Progress Summary")
+
+# Allow user to choose a week to review
+df['Week'] = df['Date'].dt.to_period('W').apply(lambda r: r.start_time)
+available_weeks = sorted(df['Week'].unique(), reverse=True)
+selected_week = st.selectbox("Select a week:", available_weeks, format_func=lambda x: x.strftime("%b %d, %Y"))
+
+# Filter data to selected week
+week_data = df[df['Week'] == selected_week].copy()
+week_data.reset_index(drop=True, inplace=True)
+
+# === Compute Weekly Stats ===
+def in_target(val):
+    return 125 <= val <= 250
+
+summary = {
+    'Macro': ['Protein', 'Carbs', 'Fat'],
+    'Average': [week_data['Protein'].mean(), week_data['Carbs'].mean(), week_data['Fat'].mean()],
+    'Min': [week_data['Protein'].min(), week_data['Carbs'].min(), week_data['Fat'].min()],
+    'Max': [week_data['Protein'].max(), week_data['Carbs'].max(), week_data['Fat'].max()],
+    'Days in Target': [
+        week_data['Protein'].apply(in_target).sum(),
+        week_data['Carbs'].apply(in_target).sum(),
+        week_data['Fat'].apply(in_target).sum(),
+    ]
+}
+summary_df = pd.DataFrame(summary)
+summary_df = summary_df.round(1)
+
+st.markdown("#### 📋 Weekly Macro Summary")
+st.dataframe(summary_df, use_container_width=True)
+
+# === Weekly Line Chart ===
+st.markdown("#### 📈 Macro Trends This Week")
+
+fig_week, ax_week = plt.subplots(figsize=(10, 4))
+ax_week.plot(week_data['Date'], week_data['Protein'], color='violet', marker='o', label='Protein')
+ax_week.plot(week_data['Date'], week_data['Carbs'], color='blue', marker='o', label='Carbs')
+ax_week.plot(week_data['Date'], week_data['Fat'], color='red', marker='o', label='Fat')
+
+ax_week.axhline(125, color='gray', linestyle='--', linewidth=1, label='125g Guide')
+ax_week.axhline(250, color='gray', linestyle='--', linewidth=1, label='250g Guide')
+
+ax_week.set_xlabel("Date")
+ax_week.set_ylabel("Grams")
+ax_week.set_title(f"Macro Trends: Week of {selected_week.strftime('%b %d, %Y')}")
+ax_week.legend()
+ax_week.grid(True)
+fig_week.autofmt_xdate()
+
+st.pyplot(fig_week)
