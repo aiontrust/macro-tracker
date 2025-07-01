@@ -9,24 +9,24 @@ CSV_FILE = "macro_log.csv"
 
 # === Load or create CSV ===
 if os.path.exists(CSV_FILE):
-df = pd.read_csv(CSV_FILE, parse_dates=['Date'])
+    df = pd.read_csv(CSV_FILE, parse_dates=['Date'])
 else:
-df = pd.DataFrame(columns=['Date', 'Protein', 'Carbs', 'Fat'])
-df.to_csv(CSV_FILE, index=False)
+    df = pd.DataFrame(columns=['Date', 'Protein', 'Carbs', 'Fat'])
+    df.to_csv(CSV_FILE, index=False)
 
 # === Today’s date ===
 today = pd.to_datetime(datetime.today().date())
 
 # === Load or initialize today's entry ===
 if today not in df['Date'].values:
-new_row = pd.DataFrame([{
-'Date': today,
-'Protein': 0,
-'Carbs': 0,
-'Fat': 0
-}])
-df = pd.concat([df, new_row], ignore_index=True)
-df.to_csv(CSV_FILE, index=False)
+    new_row = pd.DataFrame([{
+        'Date': today,
+        'Protein': 0,
+        'Carbs': 0,
+        'Fat': 0
+    }])
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_csv(CSV_FILE, index=False)
 
 # === Sidebar Inputs ===
 st.title("💪 Daily Macro Tracker (Mentzer Style)")
