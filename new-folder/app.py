@@ -121,3 +121,45 @@ ax_week.grid(True)
 fig_week.autofmt_xdate()
 
 st.pyplot(fig_week)
+
+# === Export Section ===
+from io import BytesIO
+import base64
+
+st.markdown("#### 📤 Export This Summary")
+
+# CSV export
+csv = summary_df.to_csv(index=False).encode('utf-8')
+st.download_button("Download CSV", csv, file_name=f"macro_summary_{selected_week.strftime('%Y_%m_%d')}.csv", mime='text/csv')
+
+# PDF export (optional, requires `reportlab`)
+try:
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet
+
+    def generate_pdf(summary_df, week_label):
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        styles = getSampleStyleSheet()
+        elements = [Paragraph(f"Macro Summary: Week of {week_label}", styles['Title'])]
+
+        data = [summary_df.columns.to_list()] + summary_df.values.tolist()
+        table = Table(data)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0,0), (-1,0), colors.grey),
+            ('GRID', (0,0), (-1,-1), 1, colors.black),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER')
+        ]))
+
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+        return buffer
+
+    pdf_buffer = generate_pdf(summary_df, selected_week.strftime('%b %d, %Y'))
+    st.download_button("Download PDF", pdf_buffer, file_name=f"macro_summary_{selected_week.strftime('%Y_%m_%d')}.pdf", mime='application/pdf')
+
+except ImportError:
+    st.warning("Install `reportlab` to enable PDF export: `pip install reportlab`")
