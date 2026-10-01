@@ -1,0 +1,6 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+macro_log.csv
+macro_log_complete_only.csv

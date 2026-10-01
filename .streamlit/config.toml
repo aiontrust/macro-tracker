@@ -1,0 +1,22 @@
+[theme]
+base = "dark"
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+headingFont = "Barlow Condensed:https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&display=swap"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&display=swap"
+baseRadius = "14px"
+chartCategoricalColors = ["#E8A33A", "#6FA8FF", "#D9D4CA"]
+
+[theme.dark]
+primaryColor = "#E8A33A"
+backgroundColor = "#0B0B0C"
+secondaryBackgroundColor = "#17171A"
+textColor = "#F2EFE8"
+borderColor = "#2E2E33"
+
+[theme.light]
+primaryColor = "#9A5A00"
+backgroundColor = "#F5F3EF"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#141414"
+borderColor = "#D9D5CD"
+chartCategoricalColors = ["#9A5A00", "#0069A8", "#3A3A3A"]
