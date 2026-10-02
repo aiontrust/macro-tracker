@@ -1,8 +1,8 @@
 # ONE SET.
 
-A Streamlit prototype for logging daily protein, carbs, fat, and calories. The installed product is meant to be a phone app that keeps the log on the device. This repository is the prototype you can run and deploy now.
+A daily log for protein, carbs, fat, and calories. The phone app is the PWA in [`pwa/`](pwa/README.md): static, offline after the first load, and stored on the device. This file is the Streamlit prototype you can still run and deploy.
 
-The log is a CSV that you keep. When you open the app, upload that file (or start fresh). Edits stay in the session. Download the updated CSV before you leave. Streamlit Community Cloud wipes files the app writes when it restarts or goes idle, so the app does not save your history on the server. If several people share the link, each person still has their own file.
+The log is a CSV that you keep. When you open the prototype, upload that file (or start a new log). Edits stay in the session. Download the updated CSV before you leave. Streamlit Community Cloud wipes files the app writes when it restarts or goes idle, so the prototype does not save your history on the server. If several people share the link, each person still has their own file.
 
 Blank cells are missing values. They are not zeros. Days you never saved are left out of the averages, and they break the chart line instead of being drawn as zero.
 

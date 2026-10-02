@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 macro_log.csv
 macro_log_complete_only.csv
+
+# PWA build output
+pwa/node_modules/
+pwa/dist/
+pwa/.vite/
