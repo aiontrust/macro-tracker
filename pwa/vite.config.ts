@@ -5,8 +5,9 @@ import { VitePWA } from "vite-plugin-pwa";
 // Dev server stays at /. Override with VITE_BASE if the repo name changes.
 const pagesBase = process.env.VITE_BASE || "/macro-tracker/";
 
-export default defineConfig(({ command }) => ({
-  base: command === "serve" ? "/" : pagesBase,
+export default defineConfig(({ command, isPreview }) => ({
+  // `vite preview` reports command "serve". Keep the built base so /macro-tracker/ resolves.
+  base: command === "serve" && !isPreview ? "/" : pagesBase,
   plugins: [
     VitePWA({
       registerType: "autoUpdate",
