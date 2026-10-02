@@ -14,7 +14,6 @@ import {
   rowsInWeek,
   toCsv,
   todayIso,
-  trailingWindow,
   weeklySummary,
   type FieldName,
   type MacroName,
@@ -176,7 +175,7 @@ function calorieRow(state: AppState, _entry: ReturnType<typeof entryOn>): string
     <button class="cal-value ${editing ? "hidden" : ""}" type="button" data-action="edit-calories" aria-label="Edit calories">
       <span data-cal-value>${esc(text)}</span><span class="unit" ${text ? "" : "hidden"}>kcal</span>
     </button>
-    <input class="cal-input ${editing ? "" : "hidden"}" data-field="calories" inputmode="decimal" enterkeyhint="done" autocomplete="off" aria-label="Calories" value="${esc(state.draft.calories)}">
+      <input id="field-calories" name="calories" class="cal-input ${editing ? "" : "hidden"}" data-field="calories" inputmode="decimal" enterkeyhint="done" autocomplete="off" aria-label="Calories" value="${esc(state.draft.calories)}">
   </div>`;
 }
 
@@ -212,8 +211,8 @@ function trendsScreen(state: AppState): string {
     ${
       state.preset === "custom"
         ? `<div class="custom-range">
-            <label>Start<input type="date" data-bound="custom-start" value="${esc(state.customStart)}"></label>
-            <label>End<input type="date" data-bound="custom-end" value="${esc(state.customEnd)}"></label>
+            <label>Start<input id="custom-start" name="custom-start" type="date" data-bound="custom-start" value="${esc(state.customStart)}"></label>
+            <label>End<input id="custom-end" name="custom-end" type="date" data-bound="custom-end" value="${esc(state.customEnd)}"></label>
           </div>`
         : ""
     }
@@ -325,8 +324,8 @@ function weekScreen(state: AppState): string {
         const [low, high] = state.ranges[name];
         return `<div class="range-row">
           <span>${name}</span>
-          <label>Low<input data-range="${name}" data-edge="0" inputmode="decimal" value="${formatNumber(low)}" aria-label="${name} low grams"></label>
-          <label>High<input data-range="${name}" data-edge="1" inputmode="decimal" value="${formatNumber(high)}" aria-label="${name} high grams"></label>
+          <label>Low<input id="range-${name}-low" name="${name}-low" data-range="${name}" data-edge="0" inputmode="decimal" value="${formatNumber(low)}" aria-label="${name} low grams"></label>
+          <label>High<input id="range-${name}-high" name="${name}-high" data-range="${name}" data-edge="1" inputmode="decimal" value="${formatNumber(high)}" aria-label="${name} high grams"></label>
         </div>`;
       }).join("")}
       <p class="form-error">${esc(state.formError && state.screen === "week" ? state.formError : "")}</p>
@@ -553,13 +552,17 @@ function autoFromDraft(state: AppState): number | null {
   }
 }
 
-function chartBounds(state: AppState): { start: string; end: string } | null {
+export function chartBounds(state: AppState): { start: string; end: string } | null {
   if (!state.entries.length) return null;
   if (state.preset === "all") {
     return { start: state.entries[0].date, end: state.entries[state.entries.length - 1].date };
   }
   if (state.preset === "custom") return { start: state.customStart, end: state.customEnd };
-  return trailingWindow(state.entries, Number(state.preset));
+  const end =
+    state.mode === "demo" && state.anchor ? state.anchor : state.entries[state.entries.length - 1].date;
+  let start = addDays(end, -(Number(state.preset) - 1));
+  if (start < state.entries[0].date) start = state.entries[0].date;
+  return { start, end };
 }
 
 function presetLabel(preset: Preset): string {

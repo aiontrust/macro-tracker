@@ -7,11 +7,12 @@ import {
   fingerprint,
   formatNumber,
   loadMacroCsv,
+  denseMacroDay,
+  macroChartAnchor,
   mondayOf,
   normalizeRanges,
   parseDraftNumber,
   saveDay,
-  sliceDates,
   summaryToCsv,
   toCsv,
   todayIso,
@@ -30,7 +31,7 @@ import {
   type Bucket,
 } from "./storage";
 import { PRO_SIGNUP_ENDPOINT } from "./config";
-import { isDirty, logChrome, renderApp } from "./view";
+import { chartBounds, isDirty, logChrome, renderApp } from "./view";
 
 const state = createState();
 let root: HTMLElement;
@@ -71,21 +72,25 @@ async function boot(): Promise<void> {
   const latest = state.entries.at(-1)?.date ?? today;
   if (state.mode === "demo") {
     state.screen = "log";
-    state.logDate = latest;
+    focusDemo();
   } else if (!state.started) {
+    state.anchor = null;
     state.screen = "first";
     state.logDate = today;
+    state.weekMonday = mondayOf(today);
+    state.trendDate = latest;
   } else {
+    state.anchor = null;
     state.screen = "log";
     state.logDate = today;
+    const window = trailingWindow(state.entries, 30);
+    if (window) {
+      state.customStart = window.start;
+      state.customEnd = window.end;
+    }
+    state.weekMonday = state.entries.length ? mondayOf(latest) : mondayOf(today);
+    state.trendDate = latest;
   }
-  const window = trailingWindow(state.entries, 30);
-  if (window) {
-    state.customStart = window.start;
-    state.customEnd = window.end;
-  }
-  state.weekMonday = state.entries.length ? mondayOf(latest) : mondayOf(today);
-  state.trendDate = latest;
   loadDraft(state.logDate);
   state.ready = true;
   requestPersistentStorage();
@@ -455,6 +460,7 @@ async function importFile(file: File): Promise<void> {
     const loaded = loadMacroCsv(text);
     const user = state.mode === "user" ? currentBucket() : await loadBucket("user");
     state.mode = "user";
+    state.anchor = null;
     state.started = true;
     state.entries = loaded.entries;
     state.ranges = user.ranges;
@@ -499,6 +505,7 @@ async function startFresh(): Promise<void> {
   state.lastDownloadAt = null;
   state.snapshot = {};
   state.warnings = [];
+  state.anchor = null;
   state.screen = "log";
   state.logDate = todayIso();
   state.weekMonday = mondayOf(state.logDate);
@@ -516,16 +523,7 @@ async function enterDemo(): Promise<void> {
   state.mode = "demo";
   state.warnings = [];
   state.screen = "log";
-  const latest = state.entries.at(-1)?.date ?? todayIso();
-  state.logDate = latest;
-  state.weekMonday = mondayOf(latest);
-  state.trendDate = latest;
-  state.preset = "30";
-  const window = trailingWindow(state.entries, 30);
-  if (window) {
-    state.customStart = window.start;
-    state.customEnd = window.end;
-  }
+  focusDemo();
   setDemoQuery(true);
   loadDraft(state.logDate);
   await saveMeta(currentMeta());
@@ -535,6 +533,7 @@ async function enterDemo(): Promise<void> {
 async function exitDemo(): Promise<void> {
   applyBucket(await loadBucket("user"));
   state.mode = "user";
+  state.anchor = null;
   state.warnings = [];
   setDemoQuery(false);
   if (!state.started) state.screen = "first";
@@ -551,11 +550,8 @@ async function restoreDemo(): Promise<void> {
   const seeded = seedDemo();
   applyBucket(seeded);
   state.mode = "demo";
-  const latest = state.entries.at(-1)?.date ?? todayIso();
-  state.logDate = latest;
-  state.weekMonday = mondayOf(latest);
-  state.trendDate = latest;
   state.screen = "log";
+  focusDemo();
   loadDraft(state.logDate);
   await saveBucket("demo", seeded);
   render();
@@ -567,6 +563,7 @@ async function clearData(): Promise<void> {
     state.entries = [];
     state.snapshot = {};
     state.lastDownloadAt = null;
+    state.anchor = null;
     state.screen = "log";
     state.logDate = todayIso();
     loadDraft(state.logDate);
@@ -679,19 +676,29 @@ async function submitSignup(): Promise<void> {
   render();
 }
 
-function snapTrend(): void {
-  const bounds = boundsOf();
-  if (!bounds || bounds.end < bounds.start) return;
-  const inside = sliceDates(state.entries, bounds.start, bounds.end);
-  if (state.trendDate && inside.some((entry) => entry.date === state.trendDate)) return;
-  state.trendDate = inside.at(-1)?.date ?? null;
+function focusDemo(): void {
+  const anchor = macroChartAnchor(state.entries);
+  state.anchor = anchor;
+  state.preset = "30";
+  const fallback = state.entries.at(-1)?.date ?? todayIso();
+  const day = anchor ? denseMacroDay(state.entries, anchor) : fallback;
+  state.logDate = day;
+  state.weekMonday = mondayOf(day);
+  state.trendDate = day;
+  if (anchor && state.entries.length) {
+    let start = addDays(anchor, -29);
+    if (start < state.entries[0].date) start = state.entries[0].date;
+    state.customStart = start;
+    state.customEnd = anchor;
+  }
 }
 
-function boundsOf(): { start: string; end: string } | null {
-  if (!state.entries.length) return null;
-  if (state.preset === "all") return { start: state.entries[0].date, end: state.entries[state.entries.length - 1].date };
-  if (state.preset === "custom") return { start: state.customStart, end: state.customEnd };
-  return trailingWindow(state.entries, Number(state.preset));
+function snapTrend(): void {
+  const bounds = chartBounds(state);
+  if (!bounds || bounds.end < bounds.start) return;
+  const inside = state.entries.filter((entry) => entry.date >= bounds.start && entry.date <= bounds.end);
+  if (state.trendDate && inside.some((entry) => entry.date === state.trendDate)) return;
+  state.trendDate = inside.at(-1)?.date ?? bounds.end;
 }
 
 function setDemoQuery(on: boolean): void {

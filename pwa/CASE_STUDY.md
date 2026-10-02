@@ -20,7 +20,7 @@ Target ranges default to 125–250 g for each macro and can be changed per macro
 
 ## Demo and what is not here
 
-`?demo=1` loads an anonymized history: dates shifted, numbers only, no names or notes. The source file is not in the repository.
+`?demo=1` loads an anonymized history: dates shifted, numbers only, no names or notes. The source file is not in the repository. The newest sample days are calories only, so the sample opens on the latest stretch that still has protein, carbs, and fat. A person’s own log still opens on today.
 
 Not in this version: meals, accounts, sync, a leaderboard, PDF export, and the app stores. A disabled email field on Export is the hook for a later branded gym version. It stays off until a form endpoint is configured. See `pwa/README.md`.
 

@@ -466,12 +466,73 @@ export function sliceDates(entries: DayRecord[], start: string, end: string): Da
 
 export function trailingWindow(entries: DayRecord[], days: number): { start: string; end: string } | null {
   if (!entries.length) return null;
+  return windowEnding(entries, days, entries[entries.length - 1].date);
+}
+
+export function windowEnding(entries: DayRecord[], days: number, end: string): { start: string; end: string } | null {
+  if (!entries.length) return null;
   if (days < 1) throw new MacroLogError(["The chart window must cover at least one day."]);
-  const end = entries[entries.length - 1].date;
   let start = addDays(end, -(days - 1));
   const earliest = entries[0].date;
   if (start < earliest) start = earliest;
   return { start, end };
+}
+
+export function hasMacro(entry: DayRecord): boolean {
+  return entry.protein != null || entry.carbs != null || entry.fat != null;
+}
+
+/** Latest day whose trailing window still has several gram entries.
+ *  The sample's newest days are often calories only, which would open an empty chart.
+ */
+export function macroChartAnchor(entries: DayRecord[], days = 30, minimum = 8): string | null {
+  const macroDates = entries.filter(hasMacro).map((entry) => entry.date);
+  if (!macroDates.length) return entries.at(-1)?.date ?? null;
+  let best: string | null = null;
+  for (const entry of entries) {
+    const start = addDays(entry.date, -(days - 1));
+    let count = 0;
+    for (const date of macroDates) {
+      if (date >= start && date <= entry.date) count += 1;
+    }
+    if (count >= minimum) best = entry.date;
+  }
+  return best ?? macroDates[macroDates.length - 1];
+}
+
+export function latestMacroOnOrBefore(entries: DayRecord[], date: string): string {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.date > date) continue;
+    if (hasMacro(entry)) return entry.date;
+  }
+  return date;
+}
+
+/** A day inside `end`'s trailing window whose week still has several gram entries.
+ *  The newest gram day can sit alone in a calories-only week.
+ */
+export function denseMacroDay(entries: DayRecord[], end: string, days = 30, minimum = 4): string {
+  const start = addDays(end, -(days - 1));
+  const seen = new Set<string>();
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.date > end) continue;
+    if (entry.date < start) break;
+    if (!hasMacro(entry)) continue;
+    const monday = mondayOf(entry.date);
+    if (seen.has(monday)) continue;
+    seen.add(monday);
+    const sunday = addDays(monday, 6);
+    let count = 0;
+    for (const candidate of entries) {
+      if (candidate.date < monday) continue;
+      if (candidate.date > sunday) break;
+      if (hasMacro(candidate)) count += 1;
+    }
+    if (count >= minimum) return latestMacroOnOrBefore(entries, sunday > end ? end : sunday);
+  }
+  return latestMacroOnOrBefore(entries, end);
 }
 
 export function calendarDays(start: string, end: string): string[] {

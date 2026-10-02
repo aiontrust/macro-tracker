@@ -30,6 +30,7 @@ export interface AppState {
   customStart: string;
   customEnd: string;
   trendDate: string | null;
+  anchor: string | null;
   weekMonday: string;
   lastDownloadAt: string | null;
   snapshot: Record<string, string>;
@@ -68,6 +69,7 @@ export function createState(): AppState {
     customStart: today,
     customEnd: today,
     trendDate: null,
+    anchor: null,
     weekMonday: today,
     lastDownloadAt: null,
     snapshot: {},

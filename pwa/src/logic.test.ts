@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { DEMO_LOG_CSV } from "./demo-log";
 import {
   MacroLogError,
+  addDays,
   caloriesFromMacros,
   compareWeeks,
   defaultRanges,
+  denseMacroDay,
+  hasMacro,
   loadMacroCsv,
+  macroChartAnchor,
   mondayOf,
   saveDay,
   sliceDates,
@@ -182,6 +186,15 @@ describe("demo log", () => {
     expect(new Set(entries.map((entry) => entry.date)).size).toBe(entries.length);
     expect(entries.some((entry) => entry.protein == null)).toBe(true);
     expect(entries.some((entry) => entry.calories == null)).toBe(true);
+    const anchor = macroChartAnchor(entries);
+    expect(anchor).toBeTruthy();
+    if (!anchor) return;
+    const window = entries.filter((entry) => entry.date >= addDays(anchor, -29) && entry.date <= anchor);
+    expect(window.filter(hasMacro).length).toBeGreaterThanOrEqual(8);
+    const focused = denseMacroDay(entries, anchor);
+    const week = mondayOf(focused);
+    const inWeek = entries.filter((entry) => entry.date >= week && entry.date <= addDays(week, 6) && hasMacro(entry));
+    expect(inWeek.length).toBeGreaterThanOrEqual(4);
     const again = loadMacroCsv(toCsv(entries)).entries;
     expect(again.map((entry) => entry.calories)).toEqual(entries.map((entry) => entry.calories));
     const body = DEMO_LOG_CSV.trim().split("\n").slice(1);
