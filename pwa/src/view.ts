@@ -1,4 +1,4 @@
-import { sparkSvg, trendSvg, buildTrendModel } from "./chart";
+import { sparkSvg, trendSvg, buildTrendModel, type TrendModel } from "./chart";
 import { PRO_SIGNUP_ENDPOINT } from "./config";
 import {
   MACRO_NAMES,
@@ -8,10 +8,13 @@ import {
   entryOn,
   fingerprint,
   formatNumber,
+  gramChartEnd,
   guideLevels,
   mondayOf,
   parseDraftNumber,
+  rangesAreDefault,
   rowsInWeek,
+  tightenMacroBounds,
   toCsv,
   todayIso,
   weeklySummary,
@@ -190,8 +193,17 @@ function savebar(state: AppState): string {
 function trendsScreen(state: AppState): string {
   const bounds = chartBounds(state);
   const invalid = state.preset === "custom" && state.customEnd < state.customStart;
-  const model = bounds && !invalid ? buildTrendModel(state.entries, bounds.start, bounds.end, state.ranges) : null;
-  const selected = model && state.trendDate && model.dates.includes(state.trendDate) ? state.trendDate : null;
+  const macroBounds = bounds && !invalid ? tightenMacroBounds(state.entries, bounds.start, bounds.end) : null;
+  const calorieModel = bounds && !invalid ? buildTrendModel(state.entries, bounds.start, bounds.end, state.ranges) : null;
+  const sameWindow =
+    macroBounds != null && bounds != null && macroBounds.start === bounds.start && macroBounds.end === bounds.end;
+  const model =
+    sameWindow && calorieModel
+      ? calorieModel
+      : macroBounds
+        ? buildTrendModel(state.entries, macroBounds.start, macroBounds.end, state.ranges)
+        : null;
+  const selected = selectedOnChart(model, state.trendDate);
   const picked = selected
     ? (entryOn(state.entries, selected) ?? {
         date: selected,
@@ -201,9 +213,11 @@ function trendsScreen(state: AppState): string {
         calories: null,
       })
     : null;
-  const calorieValues = model ? model.calories.filter((value): value is number => value != null) : [];
+  const calorieValues = calorieModel ? calorieModel.calories.filter((value): value is number => value != null) : [];
   const average = calorieValues.length ? calorieValues.reduce((sum, value) => sum + value, 0) / calorieValues.length : null;
   const guides = guideLevels(state.ranges);
+  const calorieSelected =
+    calorieModel && state.trendDate && calorieModel.dates.includes(state.trendDate) ? state.trendDate : selected;
   return `<section>
     <div class="segment" role="tablist" aria-label="Chart range">
       ${(["7", "14", "30", "90", "all", "custom"] as Preset[]).map((preset) => `<button type="button" role="tab" data-action="preset" data-preset="${preset}" aria-selected="${state.preset === preset}">${presetLabel(preset)}</button>`).join("")}
@@ -228,7 +242,7 @@ function trendsScreen(state: AppState): string {
             ? trendSvg(model, selected, state.theme)
             : `<p class="empty-copy">Log 2 days to see a trend line.</p>`
       }
-      ${model && model.macroDays < 2 ? `<p class="empty-copy">Log 2 days to see a trend line.</p>` : ""}
+      ${model && model.macroDays === 0 ? `<p class="empty-copy">Log protein, carbs, or fat to draw the gram lines.</p>` : ""}
       <div class="legend">
         ${MACRO_NAMES.map((name) => `<span>${marker(name, true)}<span>${name}</span></span>`).join("")}
       </div>
@@ -250,9 +264,19 @@ function trendsScreen(state: AppState): string {
         <p class="kicker">CALORIES · ${averageLabel(state.preset)}</p>
         <p class="kcal-hero">${average == null ? "—" : `${formatKcal(average)} kcal`}</p>
       </div>
-      ${model ? sparkSvg(model.calories, selected, model.dates, state.theme) : ""}
+      ${calorieModel ? sparkSvg(calorieModel.calories, calorieSelected, calorieModel.dates, state.theme) : ""}
     </article>
   </section>`;
+}
+
+function selectedOnChart(model: TrendModel | null, trendDate: string | null): string | null {
+  if (!model) return null;
+  if (trendDate && model.dates.includes(trendDate)) return trendDate;
+  for (let index = model.dates.length - 1; index >= 0; index -= 1) {
+    const logged = MACRO_NAMES.some((name) => model.series[name][index] != null) || model.calories[index] != null;
+    if (logged) return model.dates[index];
+  }
+  return model.dates.at(-1) ?? null;
 }
 
 function weekScreen(state: AppState): string {
@@ -319,13 +343,17 @@ function weekScreen(state: AppState): string {
     <p class="footnote">${esc(rangeFootnote(state))}</p>
     <details class="targets" ${state.targetsOpen ? "open" : ""}>
       <summary>Target ranges</summary>
-      <p>Days in range and the dotted guides use these gram bands. They start at 125–250 g. Fat is often under 125 g, so that band can read 0 days until you set one that fits, such as 50–90 g.</p>
+      ${
+        rangesAreDefault(state.ranges)
+          ? `<p class="range-help">Days in range and the dotted guides use these gram bands. They start at 125–250 g. Fat is often under 125 g, so that band can read 0 days until you set one that fits, such as 50–90 g.</p>`
+          : ""
+      }
       ${MACRO_NAMES.map((name) => {
         const [low, high] = state.ranges[name];
         return `<div class="range-row">
           <span>${name}</span>
-          <label>Low<input id="range-${name}-low" name="${name}-low" data-range="${name}" data-edge="0" inputmode="decimal" value="${formatNumber(low)}" aria-label="${name} low grams"></label>
-          <label>High<input id="range-${name}-high" name="${name}-high" data-range="${name}" data-edge="1" inputmode="decimal" value="${formatNumber(high)}" aria-label="${name} high grams"></label>
+          <label>Low<input id="range-${name}-low" name="${name}-low" type="text" data-range="${name}" data-edge="0" inputmode="decimal" enterkeyhint="done" autocomplete="off" value="${formatNumber(low)}" aria-label="${name} low grams"></label>
+          <label>High<input id="range-${name}-high" name="${name}-high" type="text" data-range="${name}" data-edge="1" inputmode="decimal" enterkeyhint="done" autocomplete="off" value="${formatNumber(high)}" aria-label="${name} high grams"></label>
         </div>`;
       }).join("")}
       <p class="form-error">${esc(state.formError && state.screen === "week" ? state.formError : "")}</p>
@@ -558,8 +586,8 @@ export function chartBounds(state: AppState): { start: string; end: string } | n
     return { start: state.entries[0].date, end: state.entries[state.entries.length - 1].date };
   }
   if (state.preset === "custom") return { start: state.customStart, end: state.customEnd };
-  const end =
-    state.mode === "demo" && state.anchor ? state.anchor : state.entries[state.entries.length - 1].date;
+  const latest = state.entries[state.entries.length - 1].date;
+  const end = state.mode === "demo" && state.anchor ? state.anchor : gramChartEnd(state.entries, latest, Number(state.preset));
   let start = addDays(end, -(Number(state.preset) - 1));
   if (start < state.entries[0].date) start = state.entries[0].date;
   return { start, end };
@@ -634,7 +662,7 @@ function formatPercent(value: number | null): string {
 }
 
 function rangeFootnote(state: AppState): string {
-  const same = MACRO_NAMES.every((name) => state.ranges[name][0] === 125 && state.ranges[name][1] === 250);
+  const same = rangesAreDefault(state.ranges);
   const band = same
     ? "In range = 125–250 g guide."
     : `In range = ${MACRO_NAMES.map((name) => `${name} ${formatNumber(state.ranges[name][0])}–${formatNumber(state.ranges[name][1])} g`).join(", ")}.`;

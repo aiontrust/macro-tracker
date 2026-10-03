@@ -7,9 +7,12 @@ import {
   compareWeeks,
   defaultRanges,
   denseMacroDay,
+  gramChartEnd,
   hasMacro,
   loadMacroCsv,
   macroChartAnchor,
+  rangesAreDefault,
+  tightenMacroBounds,
   mondayOf,
   saveDay,
   sliceDates,
@@ -175,6 +178,34 @@ describe("save and summary", () => {
     const csv = summaryToCsv(weeklySummary(entries, "2026-09-07"));
     expect(csv).toContain("Calories,,,,");
     expect(csv.toLowerCase()).not.toContain("nan");
+  });
+});
+
+describe("trend window", () => {
+  it("keeps one or two recent gram days and steps back over a calories-only tail", () => {
+    const recent = [
+      { date: "2026-09-04", protein: null, carbs: null, fat: null, calories: 2100 },
+      { date: "2026-10-02", protein: 180, carbs: 160, fat: 88.8, calories: 1793 },
+      { date: "2026-10-03", protein: 190, carbs: 140, fat: 90.3, calories: 1927 },
+    ];
+    expect(gramChartEnd(recent, "2026-10-03", 30)).toBe("2026-10-03");
+    expect(tightenMacroBounds(recent, "2026-09-04", "2026-10-03")).toEqual({
+      start: "2026-10-02",
+      end: "2026-10-03",
+    });
+
+    const tail = [
+      { date: "2026-04-01", protein: 150, carbs: 180, fat: 60, calories: 2000 },
+      { date: "2026-04-02", protein: 160, carbs: 170, fat: 55, calories: 1900 },
+      { date: "2026-04-03", protein: 140, carbs: 150, fat: 50, calories: 1800 },
+      { date: "2026-09-17", protein: null, carbs: null, fat: null, calories: 2200 },
+    ];
+    expect(gramChartEnd(tail, "2026-09-17", 30)).toBe("2026-04-03");
+    expect(tightenMacroBounds(tail, "2026-03-05", "2026-04-03")).toEqual({
+      start: "2026-03-05",
+      end: "2026-04-03",
+    });
+    expect(rangesAreDefault(defaultRanges())).toBe(true);
   });
 });
 

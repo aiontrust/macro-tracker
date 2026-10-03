@@ -110,7 +110,7 @@ export function trendSvg(model: TrendModel, selected: string | null, theme: "dar
   const step = model.dates.length > 1 ? (WIDTH - PAD_L - PAD_R) / (model.dates.length - 1) : 12;
   const band =
     selectedIndex >= 0
-      ? `<rect x="${(xAt(selectedIndex, model.dates.length) - step / 2).toFixed(1)}" y="${PAD_T}" width="${Math.max(step, 2).toFixed(1)}" height="${HEIGHT - PAD_T - PAD_B}" fill="${theme === "light" ? "rgba(20,20,20,0.06)" : "rgba(242,239,232,0.07)"}"/>`
+      ? bandRect(xAt(selectedIndex, model.dates.length) - step / 2, PAD_T, Math.max(step, 2), HEIGHT - PAD_T - PAD_B, theme === "light" ? "rgba(20,20,20,0.06)" : "rgba(242,239,232,0.07)")
       : "";
   const lines = MACRO_NAMES.map((name) => {
     const style = MACRO_STYLE[name];
@@ -120,6 +120,7 @@ export function trendSvg(model: TrendModel, selected: string | null, theme: "dar
     return `<path d="${seriesPath(model.series[name], model.yMax)}" fill="none" stroke="${color}" stroke-width="${style.width}"${dash}${cap}/>`;
   }).join("");
   const dense = model.dates.length > 48;
+  const markerSize = model.dates.length <= 2 ? 5.2 : dense ? 2.2 : 3.1;
   const markers = MACRO_NAMES.map((name) => {
     const style = MACRO_STYLE[name];
     const color = style[theme];
@@ -127,7 +128,7 @@ export function trendSvg(model: TrendModel, selected: string | null, theme: "dar
       .map((value, index) => {
         if (value == null) return "";
         if (dense && index % 2 === 1 && model.dates[index] !== selected) return "";
-        return marker(style.marker, xAt(index, model.dates.length), yAt(value, model.yMax), color, dense ? 2.2 : 3.1);
+        return marker(style.marker, xAt(index, model.dates.length), yAt(value, model.yMax), color, markerSize);
       })
       .join("");
   }).join("");
@@ -159,7 +160,8 @@ export function trendSvg(model: TrendModel, selected: string | null, theme: "dar
   const hits = model.dates
     .map((date, index) => {
       const x = xAt(index, model.dates.length) - step / 2;
-      return `<rect data-date="${date}" x="${x.toFixed(1)}" y="0" width="${Math.max(step, 8).toFixed(1)}" height="${HEIGHT}" fill="transparent"/>`;
+      const box = clampBox(x, 0, Math.max(step, 8), HEIGHT);
+      return `<rect data-date="${date}" x="${box.x.toFixed(1)}" y="0" width="${box.width.toFixed(1)}" height="${HEIGHT}" fill="transparent"/>`;
     })
     .join("");
   return `<svg id="trend-chart" viewBox="0 0 ${WIDTH} ${HEIGHT}" width="100%" role="img" aria-label="Grams per day. Protein is a solid line, carbs a dashed line, fat a dotted line.">
@@ -192,7 +194,20 @@ export function sparkSvg(
       return `<rect x="${x.toFixed(1)}" y="${(height - h).toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="${fill}"/>`;
     })
     .join("");
-  return `<svg class="spark" viewBox="0 0 ${width} ${height}" width="148" height="46" aria-hidden="true">${bars}</svg>`;
+  return `<svg id="calorie-chart" class="spark" viewBox="0 0 ${width} ${height}" width="148" height="46" role="img" aria-label="Calories per day, separate from the gram chart.">${bars}</svg>`;
+}
+
+function clampBox(x: number, y: number, width: number, height: number): { x: number; y: number; width: number; height: number } {
+  const left = Math.max(0, x);
+  const top = Math.max(0, y);
+  const right = Math.min(WIDTH, x + width);
+  const bottom = Math.min(HEIGHT, y + height);
+  return { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) };
+}
+
+function bandRect(x: number, y: number, width: number, height: number, fill: string): string {
+  const box = clampBox(x, y, width, height);
+  return `<rect x="${box.x.toFixed(1)}" y="${box.y.toFixed(1)}" width="${box.width.toFixed(1)}" height="${box.height.toFixed(1)}" fill="${fill}"/>`;
 }
 
 function marker(shape: "circle" | "square" | "triangle", x: number, y: number, color: string, size: number): string {

@@ -151,6 +151,41 @@ export function guideLevels(ranges?: Partial<Ranges> | null): number[] {
   return [...found].sort((a, b) => a - b);
 }
 
+export function rangesAreDefault(ranges: Ranges): boolean {
+  return MACRO_NAMES.every((name) => ranges[name][0] === TARGET_LOW && ranges[name][1] === TARGET_HIGH);
+}
+
+/** End of a preset window that still has gram values.
+ *  A calories-only tail would otherwise open an empty gram chart.
+ *  One or two recent gram days keep the latest day so they stay on the chart.
+ */
+export function gramChartEnd(entries: DayRecord[], latest: string, days: number): string {
+  const start = addDays(latest, -(Math.max(days, 1) - 1));
+  const recent = entries.some((entry) => entry.date >= start && entry.date <= latest && hasMacro(entry));
+  if (recent) return latest;
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index];
+    if (entry.date > latest) continue;
+    if (hasMacro(entry)) return entry.date;
+  }
+  return latest;
+}
+
+/** Pull a one- or two-day gram cluster out of a long empty prefix.
+ *  Two points a day apart at the end of a 30-day axis draw as a stub.
+ */
+export function tightenMacroBounds(
+  entries: DayRecord[],
+  start: string,
+  end: string,
+): { start: string; end: string } {
+  const macros = entries
+    .filter((entry) => entry.date >= start && entry.date <= end && hasMacro(entry))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (macros.length === 0 || macros.length > 2) return { start, end };
+  return { start: macros[0].date, end: macros[macros.length - 1].date };
+}
+
 export function loadMacroCsv(text: string): LoadResult {
   const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
   if (!source.trim()) {
