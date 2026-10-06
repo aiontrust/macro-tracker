@@ -33,6 +33,7 @@ import {
   type Bucket,
 } from "./storage";
 import { PRO_SIGNUP_ENDPOINT } from "./config";
+import { captureSrc, signupFormBody } from "./visit-src";
 import { chartBounds, dayInputFor, isDirty, logChrome, renderApp } from "./view";
 
 const state = createState();
@@ -54,11 +55,20 @@ export async function start(): Promise<void> {
   root.addEventListener("pointerdown", onScrub);
   root.addEventListener("pointermove", onScrub);
   root.addEventListener("toggle", onToggle, true);
+  captureVisitSrc();
   try {
     await boot();
   } catch (error) {
     console.error(error);
     root.innerHTML = `<div class="boot"><p>This browser couldn’t open on-device storage.</p></div>`;
+  }
+}
+
+function captureVisitSrc(): void {
+  try {
+    captureSrc(location.search, localStorage);
+  } catch {
+    // localStorage can throw. The signup still posts email alone.
   }
 }
 
@@ -850,7 +860,7 @@ async function submitSignup(): Promise<void> {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ email }),
+      body: signupFormBody(email, localStorage),
     });
     state.signupNote = response.ok ? "Request sent." : "The signup service didn’t accept that.";
   } catch {
