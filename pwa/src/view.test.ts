@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_LOG_CSV } from "./demo-log";
 import { defaultRanges, loadMacroCsv, macroChartAnchor, type DayRecord } from "./logic";
+import type { MealRecord } from "./meals";
 import { createState } from "./state";
 import { chartBounds, renderApp } from "./view";
 
@@ -87,6 +88,50 @@ describe("trends screen", () => {
     expect(html).not.toContain("Log 2 days to see a trend line.");
   });
 });
+
+describe("today meals", () => {
+  it("shows running totals for the day's meals", () => {
+    const state = createState();
+    state.ready = true;
+    state.started = true;
+    state.screen = "log";
+    state.logDate = "2026-10-06";
+    state.mealDays = ["2026-10-06"];
+    state.meals = [
+      meal("a", "Breakfast", 40, 50, 10),
+      meal("b", "Shake", 30, 20, 5),
+    ];
+    const html = renderApp(state);
+    expect(html).toContain("RUNNING TOTAL");
+    expect(html).toContain("Breakfast");
+    expect(html).toContain("Shake");
+    expect(html).toContain("Add meal or snack");
+    expect(html).toContain('<strong class="protein">70</strong>');
+    expect(html).toContain('<strong class="carbs">70</strong>');
+    expect(html).toContain('<strong class="fat">15</strong>');
+    expect(html).toContain("695");
+    expect(html).toContain("Not in the daily log yet");
+  });
+
+  it("shows an older saved day as one total until it is split into meals", () => {
+    const state = createState();
+    state.ready = true;
+    state.started = true;
+    state.screen = "log";
+    state.logDate = "2026-10-05";
+    state.entries = [entry("2026-10-05", 180, 160, 55, 1855)];
+    const html = renderApp(state);
+    expect(html).toContain("Daily total");
+    expect(html).toContain("Saved day total");
+    expect(html).toContain('<strong class="protein">180</strong>');
+    expect(html).toContain("1,855");
+    expect(html).not.toContain("Not in the daily log yet");
+  });
+});
+
+function meal(id: string, name: string, protein: number, carbs: number, fat: number): MealRecord {
+  return { id, date: "2026-10-06", name, protein, carbs, fat };
+}
 
 describe("week target ranges", () => {
   it("stacks the fields, uses a decimal keypad, and explains the defaults only while they last", () => {

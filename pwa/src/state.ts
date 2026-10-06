@@ -1,3 +1,4 @@
+import type { MealRecord } from "./meals";
 import { defaultRanges, todayIso, type DayRecord, type Ranges } from "./logic";
 import type { Mode, ThemeName } from "./storage";
 
@@ -10,6 +11,15 @@ export interface Draft {
   fat: string;
   calories: string;
   caloriesEdited: boolean;
+}
+
+export interface MealDraft {
+  id: string | null;
+  name: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+  error: string;
 }
 
 export interface AppState {
@@ -42,11 +52,26 @@ export interface AppState {
   signupNote: string;
   signupEmail: string;
   calorieEditing: boolean;
+  calorieDirty: boolean;
   targetsOpen: boolean;
+  meals: MealRecord[];
+  mealDays: string[];
+  /** Missing key: no typed choice. Null: use the macro formula. */
+  calorieEdits: Record<string, number | null>;
+  mealDraft: MealDraft | null;
 }
 
 export function blankDraft(): Draft {
   return { protein: "", carbs: "", fat: "", calories: "", caloriesEdited: false };
+}
+
+export function blankMealDraft(): MealDraft {
+  return { id: null, name: "", protein: "", carbs: "", fat: "", error: "" };
+}
+
+export function mealDraftDirty(draft: MealDraft | null): boolean {
+  if (!draft) return false;
+  return draft.name.trim() !== "" || draft.protein.trim() !== "" || draft.carbs.trim() !== "" || draft.fat.trim() !== "";
 }
 
 export function createState(): AppState {
@@ -81,6 +106,11 @@ export function createState(): AppState {
     signupNote: "",
     signupEmail: "",
     calorieEditing: false,
+    calorieDirty: false,
     targetsOpen: false,
+    meals: [],
+    mealDays: [],
+    calorieEdits: {},
+    mealDraft: null,
   };
 }

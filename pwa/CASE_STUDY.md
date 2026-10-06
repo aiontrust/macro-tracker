@@ -1,6 +1,6 @@
 # ONE SET. — architecture notes
 
-A one-page note for an Aion Consulting portfolio piece. The product is a daily macro log: protein, carbs, fat, and calories, once a day, then out of the way.
+A one-page note for an Aion Consulting portfolio piece. The product is a daily macro log: meals and snacks through the day, saved as one total for protein, carbs, fat, and calories.
 
 ## What it is
 
@@ -16,6 +16,8 @@ The static build is served at the domain root on Cloudflare Pages. The service w
 
 Blank cells are missing. They are not zeros, and they are left out of averages, minimums, and days-in-range. A day that was never saved is not invented.
 
+Meals and snacks are stored on the device as soon as they are added. Each one can have a name and protein, carbs, and fat in grams. Blank grams stay missing. The Today screen totals them as they change. Save this day writes one summed row into the daily log. Trends, Week, and Export still read that row. Target ranges stay on the day.
+
 Calories are `4×protein + 4×carbs + 9×fat` only when a day is saved with all three macros filled and the calorie field left blank. A number the person types is stored as an override. Opening an old file does not recompute calories that were blank, and it does not replace an override.
 
 Target ranges default to 125–250 g for each macro and can be changed per macro. Days in range use that band. Week-over-week deltas are an arrow and a sign. They are not colored, because up is not automatically good.
@@ -24,6 +26,6 @@ Target ranges default to 125–250 g for each macro and can be changed per macro
 
 `?demo=1` loads an anonymized history: dates shifted, numbers only, no names or notes. The source file is not in the repository. The newest sample days are calories only, so the sample opens on the latest stretch that still has protein, carbs, and fat. A person’s own log still opens on today.
 
-Not in this version: meals, accounts, sync, a leaderboard, PDF export, and the app stores. A disabled email field on Export is the hook for a later branded gym version. It stays off until a form endpoint is configured. See `pwa/README.md`.
+Not in this version: accounts, sync, a leaderboard, PDF export, and the app stores. A disabled email field on Export is the hook for a later branded gym version. It stays off until a form endpoint is configured. See `pwa/README.md`.
 
 Screenshots for the portfolio piece are taken from demo mode, not from a personal log.

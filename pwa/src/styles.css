@@ -532,6 +532,111 @@ main.with-save { padding-bottom: calc(var(--tabs) + var(--keyboard) + 132px); }
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+.kicker.protein, .total-grid .protein { color: var(--protein); }
+.kicker.carbs, .total-grid .carbs { color: var(--carbs); }
+.kicker.fat, .total-grid .fat { color: var(--fat); }
+.totals-card { padding-bottom: 8px; }
+.total-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.total-grid strong {
+  display: block;
+  margin-top: 2px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.total-grid .unit { display: block; margin-top: 2px; }
+.totals-card .calorie {
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border: 0;
+  border-radius: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+.meal-head { margin: 18px 0 8px; }
+.meal-head h2 { margin: 0; }
+.meal-list { list-style: none; margin: 0; padding: 0; }
+.meal {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.meal-open {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 14px;
+  padding: 12px 14px;
+}
+.meal-name { display: block; font-size: 16px; font-weight: 650; }
+.meal-note { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.meal-open .macro-line { margin-top: 6px; }
+.meal-remove {
+  width: 48px;
+  flex: none;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+.meal-form { margin-bottom: 8px; }
+.meal-slot .meal-form { margin-bottom: 0; }
+.meal-name-field { display: block; }
+.meal-name-field input {
+  width: 100%;
+  height: 48px;
+  margin-top: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 16px;
+}
+.gram-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.gram-grid label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.gram-well {
+  display: flex;
+  align-items: center;
+  height: 52px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.gram-well input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: right;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 20px;
+  font-weight: 700;
+}
+.gram-well input:focus, .meal-name-field input:focus { outline: none; }
+.gram-grid label:focus-within .gram-well,
+.meal-name-field:focus-within input { border-color: var(--accent); }
+.add-meal { margin-top: 4px; }
+.meal-empty { margin-top: 0; }
+
 @media (min-width: 520px) {
   #app { box-shadow: 0 0 0 1px #1c1c1f; }
 }

@@ -46,7 +46,7 @@ Date,Protein,Carbs,Fat,Calories
 - Do not add a row for a day you did not log. The app will not invent one.
 - Each date appears once. A file with a bad cell or a repeated date is rejected and nothing from it is imported.
 
-A day is stored only when you press Save day. The Export tab downloads the full log, which round-trips back through Upload, plus the selected week's summary as CSV or PDF.
+A day is stored only when you press Save day. In the phone app, meals and snacks stay on the device until then. Save this day still writes one row for that date, with protein, carbs, and fat added across the meals. Meal names are not part of the file. The Export tab downloads the full log, which round-trips back through Upload, plus the selected week's summary as CSV or PDF.
 
 ## Charts and weeks
 
