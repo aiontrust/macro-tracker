@@ -23,6 +23,12 @@ The entry point is `app.py` in the repository root. Dependencies are the root `r
 
 If this app was previously deployed from `new-folder/app.py`, open the app settings in Streamlit Community Cloud and change the main file path to `app.py`. Reboot the app after saving. No secrets or database are required.
 
+## Phone app on Cloudflare Pages
+
+The PWA in [`pwa/`](pwa/README.md) deploys only to Cloudflare Pages, at the domain root. In the Cloudflare project, set the root directory to `pwa`, the build command to `npm run build`, and the output directory to `dist`. Demo mode is `/?demo=1`.
+
+The phone log is stored in IndexedDB for that origin. Someone who used the old GitHub Pages address (`https://aiontrust.github.io/macro-tracker/`) should export the CSV there and import it on the new site. The two origins do not share data.
+
 ## CSV format
 
 ```text
