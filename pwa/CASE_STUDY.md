@@ -10,6 +10,8 @@ There is no account, no API, and no database on a server. The log lives in Index
 
 The portable copy is a CSV the person downloads. The Export screen is built around that fact: this phone has the only copy, unless they have saved the file somewhere else. iPhone can drop site data when the app is not installed to the home screen, which is why the download is the backup rather than a nice-to-have.
 
+The static build is served at the domain root on Cloudflare Pages. The service worker scope is `/`. IndexedDB is stored per origin, so a log saved on the previous GitHub Pages host (`https://aiontrust.github.io/macro-tracker/`) stays on that origin. Export the CSV there and import it on the new site.
+
 ## How a day is stored
 
 Blank cells are missing. They are not zeros, and they are left out of averages, minimums, and days-in-range. A day that was never saved is not invented.

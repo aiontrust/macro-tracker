@@ -13,21 +13,29 @@ npm test
 npm run dev
 ```
 
-Open http://localhost:5173. `npm run build` then `npm run preview` serves the production build at http://localhost:4173/macro-tracker/.
+Open http://localhost:5173. `npm run build` then `npm run preview` serves the production build at http://localhost:4173/. Demo mode on that build is http://localhost:4173/?demo=1.
 
 To open the public sample immediately, use http://localhost:5173/?demo=1. Sample history is bundled, date-shifted, and stored apart from a log you import or start yourself.
 
-## Deploy on GitHub Pages
+## Deploy on Cloudflare Pages
 
-The workflow `.github/workflows/pages.yml` builds this folder and deploys `pwa/dist` with GitHub Actions.
+Cloudflare Pages is the only deploy target. The site is served at the domain root. Demo mode is `/?demo=1`.
 
-1. In the repository settings, open Pages.
-2. Set the source to GitHub Actions.
-3. Push to `main` (or run the workflow by hand).
+Connect this repository and set:
 
-The site is published at `https://aiontrust.github.io/macro-tracker/`. The sample link is `https://aiontrust.github.io/macro-tracker/?demo=1`.
+1. Root directory: `pwa`
+2. Build command: `npm run build`
+3. Build output directory: `dist`
 
-The production `base` is `/macro-tracker/`, set in `vite.config.ts`. If the repository name changes, set `VITE_BASE` (include the leading and trailing slash) and rebuild.
+`pwa/.node-version` asks for Node 22, which this build needs. If the build log shows an older Node, set the environment variable `NODE_VERSION` to `22`.
+
+`public/_headers` is copied into `dist`. It tells Cloudflare to revalidate `index.html`, `sw.js`, and `manifest.webmanifest` instead of holding them for a long time. No `wrangler.toml` is required for the Git build.
+
+Turn off GitHub Pages for this repository (Settings → Pages → source None) if it is still enabled. The GitHub Actions workflow that published `pwa/dist` has been removed.
+
+### Moving an existing log
+
+The log is in IndexedDB for the site origin. A browser treats `https://aiontrust.github.io` and the new domain as different sites, so the log does not come along. On the old page (`https://aiontrust.github.io/macro-tracker/`), open Export and download the full log CSV, then import that file on the new site. A new origin starts empty.
 
 ## CSV
 
