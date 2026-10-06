@@ -6,11 +6,12 @@ import {
   loadMacroCsv,
   normalizeRanges,
 } from "./logic";
+import { emptyMealLog, reloadMealLog, type MealLog } from "./meals";
 
 export type Mode = "user" | "demo";
 export type ThemeName = "dark" | "light";
 
-export interface Bucket {
+export interface Bucket extends MealLog {
   entries: DayRecord[];
   ranges: Ranges;
   lastDownloadAt: string | null;
@@ -36,6 +37,7 @@ function emptyBucket(): Bucket {
     snapshot: {},
     seeded: false,
     seedId: 0,
+    ...emptyMealLog(),
   };
 }
 
@@ -104,6 +106,7 @@ function sanitizeBucket(value: Bucket | undefined): Bucket {
   } catch {
     ranges = defaultRanges();
   }
+  const meals = reloadMealLog(bucket);
   return {
     entries: Array.isArray(bucket.entries) ? bucket.entries : [],
     ranges,
@@ -111,6 +114,9 @@ function sanitizeBucket(value: Bucket | undefined): Bucket {
     snapshot: bucket.snapshot ?? {},
     seeded: Boolean(bucket.seeded),
     seedId: bucket.seedId ?? 0,
+    meals: meals.meals,
+    mealDays: meals.mealDays,
+    calorieEdits: meals.calorieEdits,
   };
 }
 
@@ -138,6 +144,7 @@ export function seedDemo(): Bucket {
     snapshot: {},
     seeded: true,
     seedId: DEMO_SEED,
+    ...emptyMealLog(),
   };
 }
 

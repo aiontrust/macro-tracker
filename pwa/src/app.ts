@@ -1,6 +1,7 @@
 import { DEMO_SEED } from "./demo-log";
 import {
   MacroLogError,
+  MAX_GRAMS,
   addDays,
   caloriesFromMacros,
   entryOn,
@@ -20,7 +21,8 @@ import {
   weeklySummary,
   type MacroName,
 } from "./logic";
-import { blankDraft, createState, type Preset, type Screen } from "./state";
+import { legacyMeal, mealsOn, newMealId, removeMeal, upsertMeal, visibleMeals, type MealRecord } from "./meals";
+import { blankDraft, blankMealDraft, createState, mealDraftDirty, type Preset, type Screen } from "./state";
 import {
   loadBucket,
   loadMeta,
@@ -31,12 +33,13 @@ import {
   type Bucket,
 } from "./storage";
 import { PRO_SIGNUP_ENDPOINT } from "./config";
-import { chartBounds, isDirty, logChrome, renderApp } from "./view";
+import { chartBounds, dayInputFor, isDirty, logChrome, renderApp } from "./view";
 
 const state = createState();
 let root: HTMLElement;
 let saveTimer = 0;
 let focusCalories = false;
+let focusMeal: "name" | "protein" | "carbs" | "fat" | null = null;
 let scrubFrame = 0;
 
 export async function start(): Promise<void> {
@@ -46,7 +49,6 @@ export async function start(): Promise<void> {
   root.addEventListener("click", onClick);
   root.addEventListener("input", onInput);
   root.addEventListener("change", onChange);
-  root.addEventListener("focusin", onFocusIn);
   root.addEventListener("focusout", onFocusOut);
   root.addEventListener("keydown", onKeyDown);
   root.addEventListener("pointerdown", onScrub);
@@ -91,7 +93,7 @@ async function boot(): Promise<void> {
     state.weekMonday = state.entries.length ? mondayOf(latest) : mondayOf(today);
     state.trendDate = latest;
   }
-  loadDraft(state.logDate);
+  loadDateChrome();
   state.ready = true;
   requestPersistentStorage();
   if (demoQuery && meta.mode !== "demo") await saveMeta(currentMeta());
@@ -110,6 +112,14 @@ function render(): void {
     const end = input?.value.length ?? 0;
     input?.setSelectionRange(end, end);
   }
+  if (focusMeal) {
+    const input = root.querySelector<HTMLInputElement>(`[data-field=meal-${focusMeal}]`);
+    focusMeal = null;
+    input?.closest(".meal-form, .meal-slot")?.scrollIntoView({ block: "nearest" });
+    input?.focus();
+    const end = input?.value.length ?? 0;
+    input?.setSelectionRange(end, end);
+  }
 }
 
 function applyTheme(): void {
@@ -122,6 +132,9 @@ function applyBucket(bucket: Bucket): void {
   state.ranges = bucket.ranges;
   state.lastDownloadAt = bucket.lastDownloadAt;
   state.snapshot = bucket.snapshot ?? {};
+  state.meals = bucket.meals;
+  state.mealDays = bucket.mealDays;
+  state.calorieEdits = bucket.calorieEdits;
 }
 
 function currentBucket(): Bucket {
@@ -132,6 +145,9 @@ function currentBucket(): Bucket {
     snapshot: state.snapshot,
     seeded: state.mode === "demo",
     seedId: state.mode === "demo" ? DEMO_SEED : 0,
+    meals: state.meals,
+    mealDays: state.mealDays,
+    calorieEdits: state.calorieEdits,
   };
 }
 
@@ -143,20 +159,16 @@ async function persistBucket(): Promise<void> {
   await saveBucket(state.mode, currentBucket());
 }
 
-function loadDraft(date: string): void {
-  const entry = entryOn(state.entries, date);
+function loadDateChrome(): void {
   state.draft = blankDraft();
   state.calorieEditing = false;
+  state.calorieDirty = false;
+  state.mealDraft = null;
   state.formError = "";
   state.saveFlash = false;
-  if (!entry) return;
-  state.draft.protein = entry.protein == null ? "" : formatNumber(entry.protein);
-  state.draft.carbs = entry.carbs == null ? "" : formatNumber(entry.carbs);
-  state.draft.fat = entry.fat == null ? "" : formatNumber(entry.fat);
-  const auto = caloriesFromMacros(entry.protein, entry.carbs, entry.fat);
-  const edited = entry.calories != null && (auto == null || Math.abs(entry.calories - auto) > 0.05);
-  if (edited && entry.calories != null) {
-    state.draft.calories = formatNumber(entry.calories);
+  const edit = state.calorieEdits[state.logDate];
+  if (edit != null) {
+    state.draft.calories = formatNumber(edit);
     state.draft.caloriesEdited = true;
   }
 }
@@ -181,6 +193,14 @@ function onClick(event: Event): void {
   if (action === "shift-week") shiftWeek(Number(target.dataset.dir));
   if (action === "save") void saveCurrent();
   if (action === "edit-calories") openCalories();
+  if (action === "add-meal") openAddMeal();
+  if (action === "edit-meal") openEditMeal(target.dataset.id ?? "");
+  if (action === "remove-meal") void removeMealById(target.dataset.id ?? "");
+  if (action === "commit-meal") void commitMeal();
+  if (action === "cancel-meal") {
+    state.mealDraft = null;
+    render();
+  }
   if (action === "preset") {
     state.preset = target.dataset.preset as Preset;
     snapTrend();
@@ -212,10 +232,20 @@ function onClick(event: Event): void {
 function onInput(event: Event): void {
   const target = event.target as HTMLInputElement;
   const field = target.dataset.field;
-  if (field === "protein" || field === "carbs" || field === "fat" || field === "calories") {
-    state.draft[field] = target.value;
-    if (field === "calories") state.draft.caloriesEdited = target.value.trim() !== "";
+  if (field === "calories") {
+    state.draft.calories = target.value;
+    state.draft.caloriesEdited = target.value.trim() !== "";
+    state.calorieDirty = true;
     state.formError = "";
+    paintChrome();
+  }
+  if (field === "meal-name" || field === "meal-protein" || field === "meal-carbs" || field === "meal-fat") {
+    if (!state.mealDraft) return;
+    const key = field.slice("meal-".length) as "name" | "protein" | "carbs" | "fat";
+    state.mealDraft[key] = target.value;
+    state.mealDraft.error = "";
+    const error = root.querySelector("[data-meal-error]");
+    if (error) error.textContent = "";
     paintChrome();
   }
   if (target.dataset.bound === "signup") state.signupEmail = target.value;
@@ -240,25 +270,15 @@ function onChange(event: Event): void {
   if (target.dataset.range) void updateRange(target);
 }
 
-function onFocusIn(event: FocusEvent): void {
-  const target = event.target as HTMLElement;
-  const field = target.dataset.field;
-  if (field === "protein" || field === "carbs" || field === "fat") {
-    const hint = target.closest(".macro")?.querySelector(".macro-hint");
-    if (hint) hint.textContent = "Numeric keypad open";
-  }
-}
-
 function onFocusOut(event: FocusEvent): void {
   const target = event.target as HTMLInputElement;
   const field = target.dataset.field;
-  if (field === "protein" || field === "carbs" || field === "fat") {
-    const hint = target.closest(".macro")?.querySelector(".macro-hint");
-    const rest = hint?.getAttribute("data-rest");
-    if (hint && rest) hint.textContent = rest;
-  }
   if (field === "calories") {
-    normalizeCalories();
+    try {
+      applyCalorieDraft();
+    } catch (error) {
+      state.formError = messageOf(error);
+    }
     state.calorieEditing = false;
     window.setTimeout(() => {
       if (!state.calorieEditing) paintChrome();
@@ -271,9 +291,11 @@ function onKeyDown(event: KeyboardEvent): void {
   const field = (event.target as HTMLElement).dataset.field;
   if (!field) return;
   event.preventDefault();
-  if (field === "protein") root.querySelector<HTMLInputElement>("[data-field=carbs]")?.focus();
-  if (field === "carbs") root.querySelector<HTMLInputElement>("[data-field=fat]")?.focus();
-  if (field === "fat" || field === "calories") void saveCurrent();
+  if (field === "meal-name") root.querySelector<HTMLInputElement>("[data-field=meal-protein]")?.focus();
+  if (field === "meal-protein") root.querySelector<HTMLInputElement>("[data-field=meal-carbs]")?.focus();
+  if (field === "meal-carbs") root.querySelector<HTMLInputElement>("[data-field=meal-fat]")?.focus();
+  if (field === "meal-fat") void commitMeal();
+  if (field === "calories") void saveCurrent();
 }
 
 function onScrub(event: PointerEvent): void {
@@ -334,16 +356,16 @@ function applyLeave(): void {
   state.pendingDate = null;
   state.pendingScreen = null;
   if (date) goDate(date);
-  else if (screen) {
-    state.screen = screen;
-    state.formError = "";
+  else {
+    loadDateChrome();
+    if (screen) state.screen = screen;
     render();
-  } else render();
+  }
 }
 
 function goDate(date: string): void {
   state.logDate = date;
-  loadDraft(date);
+  loadDateChrome();
   render();
 }
 
@@ -360,12 +382,9 @@ function shiftWeek(direction: number): void {
 function openCalories(): void {
   if (!state.draft.caloriesEdited) {
     try {
-      const auto = caloriesFromMacros(
-        parseDraftNumber(state.draft.protein),
-        parseDraftNumber(state.draft.carbs),
-        parseDraftNumber(state.draft.fat),
-      );
-      if (auto != null) state.draft.calories = formatNumber(auto);
+      const current = dayInputFor(state);
+      const shown = current.calories ?? caloriesFromMacros(current.protein, current.carbs, current.fat);
+      if (shown != null) state.draft.calories = formatNumber(shown);
     } catch {
       state.formError = "Enter a number, or leave the field blank.";
     }
@@ -373,6 +392,11 @@ function openCalories(): void {
   state.calorieEditing = true;
   focusCalories = true;
   render();
+}
+
+function macroAuto(): number | null {
+  const input = dayInputFor(state);
+  return caloriesFromMacros(input.protein, input.carbs, input.fat);
 }
 
 function normalizeCalories(): void {
@@ -384,11 +408,7 @@ function normalizeCalories(): void {
   }
   try {
     const parsed = parseDraftNumber(raw);
-    const auto = caloriesFromMacros(
-      parseDraftNumber(state.draft.protein),
-      parseDraftNumber(state.draft.carbs),
-      parseDraftNumber(state.draft.fat),
-    );
+    const auto = macroAuto();
     if (parsed != null && auto != null && Math.abs(parsed - auto) <= 0.05) {
       state.draft.calories = "";
       state.draft.caloriesEdited = false;
@@ -401,35 +421,63 @@ function normalizeCalories(): void {
   }
 }
 
-async function saveCurrent(): Promise<void> {
+function applyCalorieDraft(): void {
+  if (!state.calorieDirty && !state.calorieEditing) return;
   normalizeCalories();
-  let protein: number | null;
-  let carbs: number | null;
-  let fat: number | null;
-  let calories: number | null;
+  const date = state.logDate;
+  if (state.draft.caloriesEdited) {
+    const calories = parseDraftNumber(state.draft.calories);
+    if (calories == null) throw new MacroLogError(["Enter a number, or leave the field blank."]);
+    state.calorieEdits[date] = calories;
+  } else if (state.calorieDirty) {
+    state.calorieEdits[date] = null;
+  }
+  state.calorieDirty = false;
+}
+
+function rememberSavedCalories(date: string): void {
+  const saved = entryOn(state.entries, date);
+  if (!saved) {
+    delete state.calorieEdits[date];
+    return;
+  }
+  const auto = caloriesFromMacros(saved.protein, saved.carbs, saved.fat);
+  if (saved.calories != null && (auto == null || Math.abs(saved.calories - auto) > 0.05)) {
+    state.calorieEdits[date] = saved.calories;
+  } else {
+    delete state.calorieEdits[date];
+  }
+}
+
+async function saveCurrent(): Promise<void> {
+  if (state.mealDraft && mealDraftDirty(state.mealDraft)) {
+    const savedMeal = await commitMeal();
+    if (!savedMeal) return;
+  } else {
+    state.mealDraft = null;
+  }
   try {
-    protein = parseDraftNumber(state.draft.protein);
-    carbs = parseDraftNumber(state.draft.carbs);
-    fat = parseDraftNumber(state.draft.fat);
-    calories = state.draft.caloriesEdited ? parseDraftNumber(state.draft.calories) : null;
+    applyCalorieDraft();
   } catch (error) {
     state.formError = messageOf(error);
     render();
     return;
   }
   try {
-    const result = saveDay(state.entries, state.logDate, { protein, carbs, fat, calories });
+    const result = saveDay(state.entries, state.logDate, dayInputFor(state));
     if (result.status === "empty") {
-      state.formError = "Nothing was saved. Enter at least one number. An empty field is not zero.";
+      state.formError = "Nothing was saved. Add a meal with at least one number. An empty field is not zero.";
       render();
       return;
     }
     state.entries = result.entries;
+    rememberSavedCalories(state.logDate);
     state.formError = "";
     await persistBucket();
-    loadDraft(state.logDate);
-    state.saveFlash = result.status === "saved";
-    if (result.status === "saved") navigator.vibrate?.(10);
+    const flash = result.status === "saved";
+    loadDateChrome();
+    state.saveFlash = flash;
+    if (flash) navigator.vibrate?.(10);
     render();
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => {
@@ -441,6 +489,137 @@ async function saveCurrent(): Promise<void> {
     state.formError = messageOf(error);
     render();
   }
+}
+
+function openAddMeal(): void {
+  if (state.mealDraft && mealDraftDirty(state.mealDraft)) {
+    state.mealDraft.error = "Add or cancel this meal first.";
+    render();
+    return;
+  }
+  state.mealDraft = blankMealDraft();
+  state.formError = "";
+  focusMeal = "name";
+  render();
+}
+
+function openEditMeal(id: string): void {
+  if (!id) return;
+  if (state.mealDraft && state.mealDraft.id !== id && mealDraftDirty(state.mealDraft)) {
+    state.mealDraft.error = "Add or cancel this meal first.";
+    render();
+    return;
+  }
+  const entry = entryOn(state.entries, state.logDate);
+  const meal = visibleMeals(state.meals, state.logDate, entry, state.mealDays.includes(state.logDate)).find(
+    (item) => item.id === id,
+  );
+  if (!meal) return;
+  state.mealDraft = {
+    id: meal.id,
+    name: meal.name,
+    protein: meal.protein == null ? "" : formatNumber(meal.protein),
+    carbs: meal.carbs == null ? "" : formatNumber(meal.carbs),
+    fat: meal.fat == null ? "" : formatNumber(meal.fat),
+    error: "",
+  };
+  state.formError = "";
+  focusMeal = "name";
+  render();
+}
+
+async function commitMeal(): Promise<boolean> {
+  const draft = state.mealDraft;
+  if (!draft) return false;
+  let protein: number | null;
+  let carbs: number | null;
+  let fat: number | null;
+  try {
+    protein = parseDraftNumber(draft.protein);
+    carbs = parseDraftNumber(draft.carbs);
+    fat = parseDraftNumber(draft.fat);
+  } catch (error) {
+    draft.error = messageOf(error);
+    focusMeal = "protein";
+    render();
+    return false;
+  }
+  if (
+    (protein != null && protein > MAX_GRAMS) ||
+    (carbs != null && carbs > MAX_GRAMS) ||
+    (fat != null && fat > MAX_GRAMS)
+  ) {
+    draft.error = `A meal above ${formatNumber(MAX_GRAMS)} g was not added.`;
+    focusMeal = "protein";
+    render();
+    return false;
+  }
+  if (protein == null && carbs == null && fat == null) {
+    draft.error = "Enter at least one number. An empty field is not zero.";
+    focusMeal = "protein";
+    render();
+    return false;
+  }
+  const date = state.logDate;
+  const entry = entryOn(state.entries, date);
+  const authored = state.mealDays.includes(date);
+  let day = mealsOn(state.meals, date);
+  if (!authored && day.length === 0) {
+    const legacy = entry ? legacyMeal(entry) : null;
+    if (legacy && draft.id !== legacy.id) day = [{ ...legacy, id: newMealId() }];
+    adoptStoredCalorie(entry);
+  }
+  const id = draft.id && !draft.id.startsWith("legacy:") ? draft.id : newMealId();
+  const name = draft.name.replace(/\s+/g, " ").trim().slice(0, 60);
+  replaceDayMeals(date, upsertMeal(day, { id, date, name, protein, carbs, fat }));
+  state.mealDraft = null;
+  state.formError = "";
+  await persistBucket();
+  render();
+  return true;
+}
+
+async function removeMealById(id: string): Promise<void> {
+  if (!id) return;
+  if (state.mealDraft && mealDraftDirty(state.mealDraft) && state.mealDraft.id !== id) {
+    state.mealDraft.error = "Add or cancel this meal first.";
+    render();
+    return;
+  }
+  const date = state.logDate;
+  const authored = state.mealDays.includes(date);
+  const day = mealsOn(state.meals, date);
+  if (!authored && day.length === 0) {
+    if (!id.startsWith("legacy:")) return;
+    replaceDayMeals(date, []);
+  } else {
+    replaceDayMeals(date, removeMeal(day, id));
+  }
+  if (state.mealDraft?.id === id) state.mealDraft = null;
+  await persistBucket();
+  render();
+}
+
+function replaceDayMeals(date: string, day: MealRecord[]): void {
+  state.meals = [...state.meals.filter((meal) => meal.date !== date), ...day];
+  if (!state.mealDays.includes(date)) state.mealDays = [...state.mealDays, date];
+}
+
+function adoptStoredCalorie(entry: ReturnType<typeof entryOn>): void {
+  if (!entry || Object.hasOwn(state.calorieEdits, entry.date)) return;
+  const auto = caloriesFromMacros(entry.protein, entry.carbs, entry.fat);
+  if (entry.calories == null) return;
+  if (auto != null && Math.abs(entry.calories - auto) <= 0.05) return;
+  state.calorieEdits[entry.date] = entry.calories;
+  state.draft.calories = formatNumber(entry.calories);
+  state.draft.caloriesEdited = true;
+}
+
+function clearMeals(): void {
+  state.meals = [];
+  state.mealDays = [];
+  state.calorieEdits = {};
+  state.mealDraft = null;
 }
 
 async function importFile(file: File): Promise<void> {
@@ -463,6 +642,7 @@ async function importFile(file: File): Promise<void> {
     state.anchor = null;
     state.started = true;
     state.entries = loaded.entries;
+    clearMeals();
     state.ranges = user.ranges;
     state.lastDownloadAt = user.lastDownloadAt;
     state.snapshot = user.snapshot;
@@ -478,7 +658,7 @@ async function importFile(file: File): Promise<void> {
       state.customEnd = window.end;
     }
     setDemoQuery(false);
-    loadDraft(state.logDate);
+    loadDateChrome();
     await saveMeta(currentMeta());
     await persistBucket();
     requestPersistentStorage();
@@ -501,6 +681,7 @@ async function startFresh(): Promise<void> {
   state.mode = "user";
   state.started = true;
   state.entries = [];
+  clearMeals();
   state.ranges = user.ranges;
   state.lastDownloadAt = null;
   state.snapshot = {};
@@ -511,7 +692,7 @@ async function startFresh(): Promise<void> {
   state.weekMonday = mondayOf(state.logDate);
   state.trendDate = state.logDate;
   setDemoQuery(false);
-  loadDraft(state.logDate);
+  loadDateChrome();
   await saveMeta(currentMeta());
   await persistBucket();
   requestPersistentStorage();
@@ -525,7 +706,7 @@ async function enterDemo(): Promise<void> {
   state.screen = "log";
   focusDemo();
   setDemoQuery(true);
-  loadDraft(state.logDate);
+  loadDateChrome();
   await saveMeta(currentMeta());
   render();
 }
@@ -540,7 +721,7 @@ async function exitDemo(): Promise<void> {
   else {
     state.screen = "log";
     state.logDate = todayIso();
-    loadDraft(state.logDate);
+    loadDateChrome();
   }
   await saveMeta(currentMeta());
   render();
@@ -552,7 +733,7 @@ async function restoreDemo(): Promise<void> {
   state.mode = "demo";
   state.screen = "log";
   focusDemo();
-  loadDraft(state.logDate);
+  loadDateChrome();
   await saveBucket("demo", seeded);
   render();
 }
@@ -561,17 +742,19 @@ async function clearData(): Promise<void> {
   state.sheet = null;
   if (state.mode === "demo") {
     state.entries = [];
+    clearMeals();
     state.snapshot = {};
     state.lastDownloadAt = null;
     state.anchor = null;
     state.screen = "log";
     state.logDate = todayIso();
-    loadDraft(state.logDate);
+    loadDateChrome();
     await persistBucket();
     render();
     return;
   }
   state.entries = [];
+  clearMeals();
   state.snapshot = {};
   state.lastDownloadAt = null;
   state.started = false;
