@@ -17,7 +17,7 @@ export default defineConfig({
         name: "ONE SET.",
         short_name: "ONE SET.",
         description:
-          "One entry a day. Protein, carbs, fat, and calories, stored only on this device.",
+          "Meals through the day, one daily total. Protein, carbs, fat, and calories, stored only on this device.",
         theme_color: "#0B0B0C",
         background_color: "#0B0B0C",
         display: "standalone",

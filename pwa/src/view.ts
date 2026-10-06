@@ -18,10 +18,12 @@ import {
   toCsv,
   todayIso,
   weeklySummary,
+  type DayInput,
   type FieldName,
   type MacroName,
 } from "./logic";
-import type { AppState, Preset } from "./state";
+import { committedDay, effectiveDayInput, mealsOn, sameCommittedDay, visibleMeals, type MealRecord } from "./meals";
+import { mealDraftDirty, type AppState, type MealDraft, type Preset } from "./state";
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 const MONTHS_TITLE = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -43,25 +45,31 @@ export function renderApp(state: AppState): string {
   </div>`;
 }
 
+export function dayInputFor(state: AppState): DayInput {
+  return effectiveDayInput(
+    mealsOn(state.meals, state.logDate),
+    entryOn(state.entries, state.logDate),
+    calorieEditFor(state),
+    state.mealDays.includes(state.logDate),
+  );
+}
+
 export function isDirty(state: AppState): boolean {
-  const stored = entryOn(state.entries, state.logDate);
-  let protein: number | null;
-  let carbs: number | null;
-  let fat: number | null;
-  let calories: number | null;
+  if (mealDraftDirty(state.mealDraft)) return true;
   try {
-    protein = parseDraftNumber(state.draft.protein);
-    carbs = parseDraftNumber(state.draft.carbs);
-    fat = parseDraftNumber(state.draft.fat);
-    calories = state.draft.caloriesEdited ? parseDraftNumber(state.draft.calories) : null;
+    return !sameCommittedDay(dayInputFor(state), entryOn(state.entries, state.logDate));
   } catch {
     return true;
   }
-  const same = (left: number | null, right: number | null) => left === right;
-  if (!stored) return protein != null || carbs != null || fat != null || calories != null;
-  if (!same(protein, stored.protein) || !same(carbs, stored.carbs) || !same(fat, stored.fat)) return true;
-  if (!state.draft.caloriesEdited) return false;
-  return !same(calories, stored.calories);
+}
+
+function calorieEditFor(state: AppState): number | null | undefined {
+  if (state.calorieDirty) {
+    if (!state.draft.caloriesEdited) return null;
+    return parseDraftNumber(state.draft.calories);
+  }
+  if (Object.hasOwn(state.calorieEdits, state.logDate)) return state.calorieEdits[state.logDate];
+  return undefined;
 }
 
 function screen(state: AppState): string {
@@ -96,11 +104,11 @@ function firstRun(error: boolean, state?: AppState): string {
   const shown = issues.slice(0, 3);
   const extra = issues.length - shown.length;
   return `<section class="first">
-    <h1 class="display">${error ? "THAT FILE DIDN'T LOAD." : "ONE ENTRY A DAY. NOTHING ELSE."}</h1>
+    <h1 class="display">${error ? "THAT FILE DIDN'T LOAD." : "ADD MEALS. SAVE THE DAY."}</h1>
     <p class="lede">${
       error
         ? "Your CSV needs one row per day: date, protein_g, carbs_g, fat_g (kcal optional)."
-        : "Protein, carbs, fat, calories. No account, no food database, no feed."
+        : "Protein, carbs, and fat for each meal or snack. One daily total. No account, no food database, no feed."
     }</p>
     ${
       error
@@ -134,6 +142,9 @@ function logScreen(state: AppState): string {
   const today = todayIso();
   const atToday = state.logDate >= today;
   const entry = entryOn(state.entries, state.logDate);
+  const authored = state.mealDays.includes(state.logDate);
+  const visible = visibleMeals(state.meals, state.logDate, entry, authored);
+  const adding = state.mealDraft != null && state.mealDraft.id == null;
   return `<section>
     ${state.warnings.length ? `<div class="card warn-note"><p>${esc(state.warnings[0])}</p><button type="button" data-action="dismiss-warning">Dismiss</button></div>` : ""}
     <div class="stepper">
@@ -144,29 +155,119 @@ function logScreen(state: AppState): string {
       </div>
       <button class="step" type="button" data-action="shift-day" data-dir="1" aria-label="Next day" ${atToday ? "disabled" : ""}>${icon("chevron-right")}</button>
     </div>
-    ${MACRO_NAMES.map((name) => macroRow(state, name)).join("")}
-    ${calorieRow(state, entry)}
+    ${totalsCard(state)}
+    <div class="meal-head">
+      <h2 class="kicker">MEALS</h2>
+    </div>
+    ${mealList(state, visible, entry)}
+    ${adding ? mealForm(state.mealDraft) : ""}
+    ${state.mealDraft ? "" : `<button class="btn btn-secondary add-meal" type="button" data-action="add-meal">${icon("plus")} Add meal or snack</button>`}
     <p class="form-error" data-form-error role="status">${esc(state.formError)}</p>
   </section>`;
 }
 
-function macroRow(state: AppState, name: MacroName): string {
-  const key = name.toLowerCase() as "protein" | "carbs" | "fat";
-  const next = name === "Fat" ? "done" : "next";
-  return `<label class="macro">
-    ${marker(name)}
-    <span class="macro-copy">
-      <span class="macro-label">${name.toUpperCase()}</span>
-      <span class="macro-hint" data-rest="${esc(restHint(state, name))}">${esc(restHint(state, name))}</span>
-    </span>
-    <span class="well">
-      <input id="field-${key}" data-field="${key}" inputmode="decimal" enterkeyhint="${next}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${name} grams" value="${esc(state.draft[key])}">
+function totalsCard(state: AppState): string {
+  let protein: number | null = null;
+  let carbs: number | null = null;
+  let fat: number | null = null;
+  try {
+    const committed = committedDay(dayInputFor(state));
+    protein = committed.protein;
+    carbs = committed.carbs;
+    fat = committed.fat;
+  } catch {
+    protein = null;
+    carbs = null;
+    fat = null;
+  }
+  return `<article class="card totals-card">
+    <p class="kicker">RUNNING TOTAL</p>
+    <div class="total-grid" aria-live="polite">
+      ${totalCell("Protein", protein)}
+      ${totalCell("Carbs", carbs)}
+      ${totalCell("Fat", fat)}
+    </div>
+    ${calorieRow(state)}
+  </article>`;
+}
+
+function totalCell(name: MacroName, value: number | null): string {
+  const tone = name.toLowerCase();
+  return `<div>
+    <span class="kicker ${tone}">${name.toUpperCase()}</span>
+    <strong class="${tone}">${value == null ? "—" : formatNumber(value)}</strong>
+    <span class="unit">g</span>
+  </div>`;
+}
+
+function mealList(state: AppState, visible: MealRecord[], entry: ReturnType<typeof entryOn>): string {
+  const adding = state.mealDraft != null && state.mealDraft.id == null;
+  if (visible.length === 0 && !adding) {
+    const caloriesOnly =
+      entry != null && entry.protein == null && entry.carbs == null && entry.fat == null && entry.calories != null;
+    const copy = caloriesOnly
+      ? "Calories are logged for this day. Add a meal to break it down."
+      : "No meals yet. Add one as you eat.";
+    return `<p class="empty-copy meal-empty">${copy}</p>`;
+  }
+  if (visible.length === 0) return "";
+  return `<ul class="meal-list">
+    ${visible
+      .map((meal) => {
+        if (state.mealDraft?.id === meal.id) return `<li class="meal-slot">${mealForm(state.mealDraft)}</li>`;
+        return mealRow(meal);
+      })
+      .join("")}
+  </ul>`;
+}
+
+function mealRow(meal: MealRecord): string {
+  const title = meal.name.trim() || "Meal";
+  const legacy = meal.id.startsWith("legacy:");
+  return `<li class="meal">
+    <button class="meal-open" type="button" data-action="edit-meal" data-id="${esc(meal.id)}">
+      <span class="meal-name">${esc(title)}</span>
+      ${legacy ? `<span class="meal-note">Saved day total</span>` : ""}
+      <span class="macro-line">
+        <span class="p">P ${showNum(meal.protein)}</span>
+        <span class="c">C ${showNum(meal.carbs)}</span>
+        <span class="f">F ${showNum(meal.fat)}</span>
+      </span>
+    </button>
+    <button class="meal-remove" type="button" data-action="remove-meal" data-id="${esc(meal.id)}" aria-label="Remove ${esc(title)}">${icon("trash")}</button>
+  </li>`;
+}
+
+function mealForm(draft: MealDraft | null): string {
+  if (!draft) return "";
+  const editing = draft.id != null;
+  return `<div class="card meal-form">
+    <label class="meal-name-field">
+      <span class="kicker">NAME · OPTIONAL</span>
+      <input id="meal-name" data-field="meal-name" maxlength="60" autocomplete="off" enterkeyhint="next" placeholder="Breakfast, shake, snack" aria-label="Meal name" value="${esc(draft.name)}">
+    </label>
+    <div class="gram-grid">
+      ${gramField("protein", "Protein", draft.protein, "next")}
+      ${gramField("carbs", "Carbs", draft.carbs, "next")}
+      ${gramField("fat", "Fat", draft.fat, "done")}
+    </div>
+    <p class="form-error" data-meal-error role="status">${esc(draft.error)}</p>
+    <button class="btn btn-primary" type="button" data-action="commit-meal">${editing ? "Update meal" : "Add meal"}</button>
+    <button class="btn btn-ghost" type="button" data-action="cancel-meal">Cancel</button>
+  </div>`;
+}
+
+function gramField(key: "protein" | "carbs" | "fat", label: string, value: string, hint: string): string {
+  return `<label>
+    <span class="kicker ${key}">${label.toUpperCase()}</span>
+    <span class="gram-well">
+      <input id="meal-${key}" data-field="meal-${key}" inputmode="decimal" enterkeyhint="${hint}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${label} grams" value="${esc(value)}">
       <span class="unit">g</span>
     </span>
   </label>`;
 }
 
-function calorieRow(state: AppState, _entry: ReturnType<typeof entryOn>): string {
+function calorieRow(state: AppState): string {
   const text = calorieText(state);
   const editing = state.calorieEditing;
   return `<div class="calorie">
@@ -445,10 +546,10 @@ function sheet(state: AppState): string {
   if (state.sheet === "discard") {
     return `<div class="backdrop" role="presentation">
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-        <h2 id="sheet-title">Leave without saving?</h2>
-        <p>This day has numbers that aren’t stored on the phone yet.</p>
+        <h2 id="sheet-title">Leave without saving the day?</h2>
+        <p>Meals already added stay on this phone. Trends, Week, and Export use the saved daily total.</p>
         <button class="btn btn-primary" type="button" data-action="stay">Stay</button>
-        <button class="btn btn-danger" type="button" data-action="discard">Discard</button>
+        <button class="btn btn-danger" type="button" data-action="discard">Leave</button>
       </div>
     </div>`;
   }
@@ -490,18 +591,11 @@ function icon(name: string): string {
   return `<svg ${common}>${paths[name] ?? ""}</svg>`;
 }
 
-function restHint(state: AppState, name: MacroName): string {
-  if (!state.entries.length && name === "Protein") return "Log once a day, best done right after training.";
-  const yesterday = entryOn(state.entries, addDays(state.logDate, -1));
-  const value = yesterday ? (name === "Protein" ? yesterday.protein : name === "Carbs" ? yesterday.carbs : yesterday.fat) : null;
-  if (value == null) return "No entry yesterday";
-  return `Yesterday ${formatNumber(value)} g`;
-}
-
 function statusText(state: AppState): string {
-  if (isDirty(state)) return "Unsaved changes";
+  if (mealDraftDirty(state.mealDraft)) return "Finish this meal";
+  if (isDirty(state)) return "Not in the daily log yet";
   const entry = entryOn(state.entries, state.logDate);
-  if (!entry) return "Not logged yet";
+  if (!entry) return "No meals yet";
   if (!entry.updatedAt) return "Logged";
   const when = new Date(entry.updatedAt);
   if (Number.isNaN(when.getTime())) return "Logged";
@@ -542,12 +636,7 @@ export function showNudge(state: AppState): boolean {
 
 function previewCalories(state: AppState): number | null {
   try {
-    if (state.draft.caloriesEdited) return parseDraftNumber(state.draft.calories);
-    return caloriesFromMacros(
-      parseDraftNumber(state.draft.protein),
-      parseDraftNumber(state.draft.carbs),
-      parseDraftNumber(state.draft.fat),
-    );
+    return committedDay(dayInputFor(state)).calories;
   } catch {
     return null;
   }
@@ -560,24 +649,15 @@ function calorieText(state: AppState): string {
 }
 
 function calorieHint(state: AppState): string {
-  if (state.draft.caloriesEdited) {
-    const stored = previewCalories(state);
-    const auto = autoFromDraft(state);
-    if (stored != null && auto != null && Math.abs(stored - auto) > 0.05) return "Edited · tap to change";
+  try {
+    const input = dayInputFor(state);
+    const auto = caloriesFromMacros(input.protein, input.carbs, input.fat);
+    const shown = committedDay(input).calories;
+    if (shown != null && (auto == null || Math.abs(shown - auto) > 0.05)) return "Edited · tap to change";
+  } catch {
+    return "Enter a number, or leave the field blank.";
   }
   return "Auto from macros · tap to edit";
-}
-
-function autoFromDraft(state: AppState): number | null {
-  try {
-    return caloriesFromMacros(
-      parseDraftNumber(state.draft.protein),
-      parseDraftNumber(state.draft.carbs),
-      parseDraftNumber(state.draft.fat),
-    );
-  } catch {
-    return null;
-  }
 }
 
 export function chartBounds(state: AppState): { start: string; end: string } | null {

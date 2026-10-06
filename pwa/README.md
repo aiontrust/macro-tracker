@@ -1,6 +1,6 @@
 # ONE SET. PWA
 
-The phone app. One entry a day for protein, carbs, fat, and calories. The log stays in IndexedDB on the device. There is no account and no server-side copy.
+The phone app. Log meals and snacks through the day, then save one daily total for protein, carbs, fat, and calories. The log stays in IndexedDB on the device. There is no account and no server-side copy.
 
 The Streamlit app in the repository root is the prototype. This folder is the product.
 
@@ -43,10 +43,12 @@ Full-log export is `Date,Protein,Carbs,Fat,Calories`. Blank cells stay blank. Im
 
 When protein, carbs, and fat are filled and calories is left blank, Save stores `4×protein + 4×carbs + 9×fat`. A typed calorie number is kept. Loading a file does not recompute calories that were left blank.
 
+Meals stay on the device as they are added. Save this day still writes one row for that date, with the grams added together. Meal names are not in the CSV. An older day that was logged as a single total still loads, and so does a file you import.
+
 ## Pro early access
 
 The Export screen has a signup form for a branded gym version. It is disabled until `PRO_SIGNUP_ENDPOINT` in `src/config.ts` is a URL that accepts a form field named `email` (Formspree works). Set it, rebuild, and redeploy. The macro log is not sent.
 
 ## Deferred
 
-Meals, accounts, sync, a leaderboard, PDF export, and app stores are not in this version. Summary PDF is shown as unavailable. Light mode is included as a stretch and can be switched on Export.
+Accounts, sync, a leaderboard, PDF export, and app stores are not in this version. Summary PDF is shown as unavailable. Light mode is included as a stretch and can be switched on Export.
