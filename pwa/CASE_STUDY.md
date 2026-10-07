@@ -28,4 +28,27 @@ Target ranges default to 125–250 g for each macro and can be changed per macro
 
 Not in this version: accounts, sync, a leaderboard, PDF export, and the app stores. A disabled email field on Export is the hook for a later branded gym version. It stays off until a form endpoint is configured. See `pwa/README.md`.
 
-Screenshots for the portfolio piece are taken from demo mode, not from a personal log.
+## Screenshots
+
+These are from a personal log on the live app, included with permission.
+
+<table>
+  <tr>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/01-today.png" alt="Today tab on 7 October: Banana Bread, Protein Shake, and Cheese Omelette, with a running total of P 97, C 181.6, F 119.75, and 2,192 kcal" width="180"><br>
+      Meal logging with running totals
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/02-trends.png" alt="Trends tab for 1–7 October: protein, carbs, and fat chart, plus a 30-day calorie average of 2,563 kcal" width="180"><br>
+      Trends chart
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/03-week.png" alt="Week tab for 5–11 October: 3 of 7 days logged, with average, minimum, maximum, in-range, and the previous week" width="180"><br>
+      Weekly summary
+    </td>
+    <td align="center" valign="top" width="25%">
+      <img src="docs/screenshots/04-export.png" alt="Export tab: this phone has the only copy, download the full log as CSV, and weekly summary options" width="180"><br>
+      Export and backup
+    </td>
+  </tr>
+</table>
